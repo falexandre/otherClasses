@@ -1,102 +1,5 @@
 <?php
  
-
- /* 
-
-******************	Usando a classe ********************************
-
-//Inicia a Session
-session_start();
- 
-//inclui a conexão
-require('config/conexao.php');
- 
-//Include a classe Carrinho.php
-require('classes/Carrinho.php');
- 
-//Instancia o Carrinho
-$cart = new Carrinho();
- 
-//Verifica se irá adicionar produto ao carrinho
-if(isset($_POST['acao']) && $_POST['acao'] == 'add'){
-    /**
-     *
-     * Resgata o ID do produto
-     * Resgata o ID da cor
-     * Resgata a Quantidade
-     *
-     */
-/*  $id     = $_POST['id'];
-    $cor_id     = (isset($_POST['cor_id'])) ?$_POST['cor_id'] : null;
-    $qtd        = $_POST['qtd'];
-    //Adicionar o produto no carrinho
-    $cart->adicionar($id, $qtd, $cor_id);
-}
- 
-//Verifica se vai alterar o produto
-if(isset($_POST['acao']) && $_POST['acao'] == 'alterar'){
-    //Percorre o array da quantidade para resgatar
-    // o indice e valor da quantidade
-    foreach($_POST['qtd'] as $indice => $valor){
-        $cart->alterar($indice, $valor);
-    }
-}
- 
-//Verifica para excluir o produto
-if(isset($_GET['apagar'])){
-    $cart->excluir($_GET['apagar']);
-}
- 
-//retorna todos produtos do carrinho
-$produtos = $cart->listarProdutos();
- 
-//retorna valor do total do carrinho
-$total    = $cart->valorTotal(); 
-
-
-<table>
-    <thead>
-        <tr>
-            <th>Produto</th>
-            <th>Quantidade</th>
-            <th>Preço</th>
-            <th>SubTotal</th>
-            <th>Excluir</th>
-        </tr>
-    </thead>
- 
-    <form action="" method="post">
-        <tfoot>
-            <tr>
-                <td colspan="5">
-                                 <input type="submit" value="Alterar o Carrinho" />
-                                 <input type="hidden" name="acao" value="alterar" />
-                </td>
-            </tr>
-        </tfoot>
- 
-        <tbody>
-        <?php foreach($produtos as $indice => $valor) <img src="http://www.davidchc.com.br/wp-includes/images/smilies/icon_confused.gif" alt=":?" class="wp-smiley"> >
-            <tr>
-                <td><?php echo $row['produto']. ' - '.$row['cor']?></td>
-                <td><input type="text" name="qtd[<?php echo $indice?>]"  value="<?php echo $valor['qtd']?>" /></td>
-                <td>R$ <?php echo number_format($valor['preco'], 2, ',', '.')?></td>
-                <td>R$ <?php echo number_format($valor['subtotal'], 2, ',', '.')?></td>
-                <td><a href="carrinho.php?apagar=<?php echo $indice?>">Excluir</a></td>
-            </tr>
-        <?php endforeach;?>
-        </tbody>
- 
-    </form>
- 
- 
-</table>
-
-
-****************** FIM Usando a classe ********************************
-
- */
- 
  
  
 final class Carrinho{
@@ -110,46 +13,83 @@ final class Carrinho{
      */
 	 
     public function __construct(){
-        if(!isset($_SESSION['carrinho_virtual_force'])){
-            $_SESSION['carrinho_virtual_force'] = array();
+        if(!isset($_SESSION[SESSAOCARRINHO])){
+            $_SESSION[SESSAOCARRINHO] = array();
         }
     }
- 
+	/* 
+		
+		Retorna o valor para carrinho exibido no topo
+
+	*/
+
+    public static function cesta(){
+    	$cont 	= self::quantidade();
+    	$itens  = $cont > 1 ? 'itens' : 'item';
+		return $cont > 0 ? self::quantidade() . " ".$itens : "vazio";
+    }	
+	/* 
+		
+		Retorna a quantidade do carrinho
+
+	*/
+
+    public static function quantidade(){
+		
+		$itens = 0;
+		 if(isset($_SESSION[SESSAOCARRINHO]) ){
+			$itens =  count( $_SESSION[SESSAOCARRINHO] );
+        }
+		return $itens;
+    }	
+
+	/**
+	 * Retorna quantidade em estoque de um produto
+	 * @param  $id integer - id do produto a buscar estoque
+	 */
+
+    public static function estoque( $id ){
+		
+		$SQL	= "SELECT estoque FROM produto WHERE id = '$id' AND status = 'S'";
+		$total	= SQLcontrole::total($SQL);
+		if( $total > 0 ):
+			$query	= BD::getConn()->query($SQL);
+			$row	= $query->fetch(PDO::FETCH_ASSOC);
+			return $row['estoque'];
+		else:
+			return false;
+		endif;
+    }
     /**
      *
      * Adiciona um produto ao carrinho
      *
-     * Veja que criar uma chave, tendo a composição de 2 items:
-     * o ID do produto e o ID da cor do produto
-     * Essa maneira não irá sobreescrever quando quiser
-     * vários produtos com cores diferentes.
-     *
-     * Um detalhe, se não tiver cor, ele atribui o valor zero,
-     * facilitando na hora de verificar se tem cor ou não
-     *
      * @param integer $id é código do produto adicionado
      * @param integer $qtd é  quantidade
-     * @param integer $cor_id é a cor do produto
      *
      */
-    public function adicionar($id, $qtd = 1, $cor_id=null){
-        //verificar se o valor é nulo
-        if(is_null($cor_id)){
-            //Se for, monta o indice, sendo o valor para cor como 0
-            $indice = sprintf('%s:%s', (int)$id, 0);
-        }else{
-            //Se existe um valor, atribui ao indice
-            $indice = sprintf('%s:%s', (int)$id, (int)$cor_id);
-        }
-        /**
-         * Se não existir esse indice no carrinho
-         * Atribui ao carrinho com a quantidade
-         */
-        if(!isset($_SESSION['carrinho_virtual_force'][$indice])){
-            $_SESSION['carrinho_virtual_force'][$indice] = (int)$qtd;
-        }
+    public static function adicionar( $id , $qtd = 1 ){
+		
+		$estoque = self::estoque($id);
+		$qtd	 = ( $qtd < 1 ) ? 1 : Funcoes::soNumeros($qtd); //garantindo que não seja 0 e seja so numeros
+		
+		if(!$estoque):
+			return false;
+		elseif( $estoque >= $qtd ):
+			//verificar se o valor é nulo
+			
+			$indice = sprintf('%s', (int)$id );
+			
+			/**
+			 * Se não existir esse indice no carrinho
+			 * Atribui ao carrinho com a quantidade
+			 */
+			if(!isset($_SESSION[SESSAOCARRINHO][$indice])){
+				$_SESSION[SESSAOCARRINHO][$indice] = (int)$qtd;
+			}
+		endif;
     }
- 
+
     /**
      *
      * Altera a quantidade do carrinho
@@ -158,15 +98,15 @@ final class Carrinho{
      * @param string $indice é a chave do array
      * @param integer $qtd é quantidade para alterar
      */
-    public function alterar($indice, $qtd){
+    public static function alterar($id, $qtd){
         //verifica se existe esse indice
-        if(isset($_SESSION['carrinho_virtual_force'][$indice])){
-            //se o quantidade for maior que zero
-            if($qtd > 0){
-                //realiza a alteração
-                $_SESSION['carrinho_virtual_force'][$indice] = (int)$qtd;
-            }
-        }
+		$qtd	 	= ( $qtd < 1 ) ? 1 : Funcoes::soNumeros($qtd); //garantindo que não seja 0 e seja so numeros
+		$estoque 	= self::estoque($id);
+		if( $qtd <= $estoque and isset($_SESSION[SESSAOCARRINHO][$id]) ):
+			$_SESSION[SESSAOCARRINHO][$id] = (int)$qtd;
+		else:
+			return false;
+		endif;
     }
  
     /**
@@ -174,9 +114,9 @@ final class Carrinho{
      * Excluir o produto do carrinho
      * @param string $indice
      */
-    public function excluir($indice){
+    public static function excluir($indice){
         //excluir o produto do carrinho
-        unset($_SESSION['carrinho_virtual_force'][$indice]);
+        unset($_SESSION[SESSAOCARRINHO][$indice]);
     }
  
     /**
@@ -184,47 +124,97 @@ final class Carrinho{
      * Retorna um array com os dados dos produtos no carrinho
      * @return array $result
      */
-    public function listarProdutos(){
+    public static function listarProdutos(){
         //inicia a variável com array
-        $result = array();
-        foreach( $_SESSION['carrinho_virtual_force'] as $indice => $qtd ){
-            //Separa o ID do produto do ID da cor
-            list( $id , $cor_id )      = explode( ':', $indice );
- 
-            //Realizar a busca pelo produto, selecionado apenas o nome do produto e preço
-            //$query_product              = mysql_query("SELECT produto, preco FROM produtos WHERE id = '$id'");
-            $query_product              = BD::getConn()->query("SELECT titulo, preco FROM produtos WHERE id = '$id'");
-			
-            //retorna os itens do tabela produtos
-            //$row_product                = mysql_fetch_assoc($query_product);
-			$row_product 				= $query_product->fetch(PDO::FETCH_ASSOC);
-            /**
-             * Adicionar ao array o nome do produto, preço , quantidade, subtotal e a cor
-             * È importante reparar que indice desse array será o mesmo
-             * do carrinho.
-             */
- 
-            $result[$indice]['produto'] = $row_product['titulo'];
-            $result[$indice]['preco']   = $row_product['preco'];
-            $result[$indice]['qtd']     = $qtd
-            $result[$indice]['subtotal']= $row_product['preco'] * $qtd;
-            $result[$indice]['cor']     = '';
- 
-            //Verifica se existe cor para o produto
-            if($cor_id > 0) {
-                //Faz a busca pela cor , seleciona apenas o nome da cor
-                $query_cor              = BD::getConn()->query("SELECT cor FROM cores WHERE id = '$cor_id'");
- 
-                //retorna os itens do tabela cores
-                $row_cor                = $query_cor->fetch(PDO::FETCH_ASSOC);
-                //Adiciona o nome da cor
-                $result[$indice]['cor'] = $row_cor['cor'];
-            }
+        $result 	= array();
+        if( isset( $_SESSION[SESSAOCARRINHO] ) AND count( $_SESSION[SESSAOCARRINHO] ) > 0  ){
+
+    		$carrinho 	= $_SESSION[SESSAOCARRINHO];
+    	
+    			foreach( $carrinho as $id => $qtd ){
+    							
+    				//busca a foto do produto
+    				$foto						=	Produto::foto( $id , "fotop");
+    	 
+    				//Realizar a busca pelo produto, selecionado apenas o nome do produto e preço
+    				$query_product              = BD::getConn()->query("SELECT codigo , titulo, valor , valor_de , peso , frete , marca_id FROM produto WHERE id = '$id'   AND status = 'S' ");
+    				
+    				//retorna os itens do tabela produtos
+    				$row_product 				= $query_product->fetch(PDO::FETCH_ASSOC);
+    				
+    				
+    				
+    				/**
+    				 * Adicionar ao array o nome do produto, preço , quantidade, subtotal e a cor
+    				 * È importante reparar que indice desse array será o mesmo
+    				 * do carrinho.
+    				 */
+    	 
+    				$result[$id]['codigo'] 		= $row_product['codigo'];
+    				$result[$id]['produto'] 	= $row_product['titulo'];
+    				$result[$id]['valor']   	= $row_product['valor'];
+    				$result[$id]['valor_de']   	= $row_product['valor_de'];
+    				$result[$id]['qtd']     	= $qtd;
+    				$result[$id]['subtotal']	= $row_product['valor'] * $qtd;
+    				$result[$id]['subtotal_de']	= $row_product['valor_de'] * $qtd;
+    				$result[$id]['peso']		= floatval(str_replace(',', '.', $row_product['peso'] )) * $qtd;
+    				$result[$id]['frete']		= $row_product['frete'];
+    				$result[$id]['marca_id']	= $row_product['marca_id'];
+    				$result[$id]['cor']     	= '';
+    				$result[$id]['foto']     	= $foto;
+    	 
+    		
+    			}
+    		
+            return $result;
         }
- 
-        return $result;
     }
      
+    
+ 	
+
+
+
+    /**
+     *
+     * Retorna o peso total do carrinho
+     * Aqui apenas listaremos os pesos
+     * somaremos o total, que é
+     * o peso vezes a quantidade
+     * retiramos os pesos com frete grátis
+     * separamos sem frete caso deseja cobrar o frete
+     * onde o cliente opita por sedex
+     * @return  Array  - Chave PAGO peso total Chave GRATIS Peso subtraido os grátis
+     * 
+     */
+    public static function pesoTotal(){
+        //listar todos os produtos
+        $produtos = self::listarProdutos();
+        //inicia as variáveis
+        $SEDEX    		= 0;
+        $PAC			= 0;
+        //listar os produtos, para resgatar o peso total sedex
+         
+        foreach($produtos as $indice => $row){
+            //realiza a soma
+            $SEDEX += floatval(str_replace(',', '.', $row['peso'] ));
+        } 
+		  //listar os produtos, para resgatar o peso total PAC com gratis
+        foreach($produtos as $indice => $row){
+            //realiza a soma
+			$frete	= $row['frete'];
+			if( $frete == "N" ):
+            $PAC	+= floatval(str_replace(',', '.', $row['peso'] ));
+			endif;
+        }
+         
+        return array( 'PAGO' => $SEDEX , 'GRATIS' => $PAC );
+         
+    } 
+
+
+
+
     /**
      *
      * Retorna o valor total do carrinho
@@ -233,20 +223,97 @@ final class Carrinho{
      * o preço vezes a quantidade
      * Isso já foi calculado no método listarProdutos
      */
-    public function valorTotal(){
-        //listar todos os produtos
-        $produtos = $this->listarProdutos();
-        //inicia a variável
-        $total    = 0;
-        //listar os produtos, para resgatar o subtotal
-         
-        foreach($produtos as $indice => $row){
-            //realiza a soma
-            $total += $row['subtotal'];
+    public static function valorTotal(){
+
+            //inicia a variável
+            $total    = 0;
+
+        if( isset( $_SESSION[SESSAOCARRINHO] ) AND count( $_SESSION[SESSAOCARRINHO] ) > 0  ){
+
+            //listar todos os produtos
+            $produtos = self::listarProdutos();
+            //listar os produtos, para resgatar o subtotal
+           
+            foreach($produtos as $indice => $row){
+                //realiza a soma
+                $total += $row['subtotal'];
+            }
+            //verifica se existe cupom de desconto e efetua o mesmo
+            if( isset($_SESSION[SESSAOCUPOMDESCONTO]) AND !empty($_SESSION[SESSAOCUPOMDESCONTO])  ){
+                $valor_cupom = $_SESSION[SESSAOCUPOMDESCONTO]['valor'];
+                $total_desco = $total - $valor_cupom;
+                $total       = $total_desco;
+            }
+
+
+
         }
          
         return $total;
          
     }
+
+
+
+    /**
+     *
+     * Retorna o valor total do carrinho somando frete
+     * Chama o valor total e soma com valor do frete
+     */
+    public static function valorTotalFrete( $tipo_frete , $cep ){
+
+        $tipo_frete = $tipo_frete == 2 ? 'pac'      : 'sedex';
+        $peso_tipo  = $tipo_frete == 2 ? 'GRATIS'   : 'PAGO';
+
+        /* Conta os números digitados */
+        $total_numero   = strlen($cep);
+        $peso           = self::pesoTotal();
+
+            if($total_numero == 8 ){
+
+                if( $peso[$peso_tipo] >= 30 ){
+
+                    $total_compra = self::valorTotal();
+                    $total_frete  = $total_compra + FRETE_PADRAO;
+                    return array( 'FRETE' => FRETE_PADRAO , 'TOTAL' => $total_compra , 'TOTAL_FRETE' => $total_frete );
+
+                }else{
+
+                    $dados_calc = array( 'cep_destino'=> $cep , 'peso' => $peso[$peso_tipo] );
+                    $calc_frete = new   Correios( $dados_calc );
+                    $calculo    = $calc_frete->calcular_frete(  $tipo_frete   );
+                    $ERRO       = $calc_frete->msg_error;
+
+                    if( empty($ERRO) ){
+
+                        $total_compra = self::valorTotal();
+                        $valor_frete  = $calculo['TOTALFRETE'];
+                        $total_frete  = $total_compra + $valor_frete;
+                        return array( 'FRETE' => $valor_frete , 'TOTAL' => $total_compra , 'TOTAL_FRETE' => $total_frete );
+            
+                    }else{
+                        return '<span class="resultado_frete">N&atilde;o foi poss&iacute;vel calcular o frete! tente novamente.</span>';
+                    }
+
+                }
+
+
+            }else{
+
+                return '<span class="resultado_frete">N&uacute;mero do cep inv&aacute;lido!</span>';
+
+            }
+   
+         
+    }
+
+
+
+
+
+
+
+	
+	
 }
 ?>
